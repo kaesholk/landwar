@@ -3,9 +3,9 @@
 std::map<TileType, char> TILE_CHARS = {
     { TileType::Blank,  '.' },
     { TileType::Ally,   'A' },
+    { TileType::Nuke,   'N' },
     { TileType::Revolt, 'R' },
     { TileType::Spy,    'S' },
-    { TileType::Nuke,   'N' },
 };
 
 std::ostream& operator<<(std::ostream& os, const Tile& tile) {

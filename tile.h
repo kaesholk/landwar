@@ -7,9 +7,9 @@
 enum class TileType {
     Blank,
     Ally,
+    Nuke,
     Revolt,
     Spy,
-    Nuke
 };
 extern std::map<TileType, char> TILE_CHARS;
 extern std::map<TileType, size_t> TILE_COUNTS;

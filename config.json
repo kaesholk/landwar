@@ -1,0 +1,8 @@
+{
+    "map_width": 7,
+    "map_height": 7,
+    "max_ally_tiles": 4,
+    "max_revolt_tiles": 4,
+    "max_spy_tiles": 4,
+    "max_nuke_tiles": 4
+}

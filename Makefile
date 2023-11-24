@@ -325,9 +325,8 @@ help:
 #
 # ADD YOUR OWN DEPENDENCIES HERE
 
-config.o: config.cpp config.h json.hpp
 options.o: options.cpp options.h
-game.o: game.cpp game.h tile.h options.o config.o
+game.o: game.cpp game.h tile.h options.o
 landwar: game.cpp game.o
 
 

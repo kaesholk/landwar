@@ -13,6 +13,7 @@ struct Config {
     int max_revolt_tiles = 4;
     int max_spy_tiles = 4;
     int max_nuke_tiles = 4;
+    int num_player_actions = 2;
 };
 
 class Game {
@@ -30,4 +31,11 @@ class Game {
         void read_config(std::string filename);
         void fill_map();
         void print_map();
+        void take_turn(TileStatus player);
+        size_t convert_x(char x_char);
+        // actions return false if there is an error, so the player can try again
+        bool take_action(TileStatus player);
+        bool scout(size_t x, size_t y);
+        bool occupy(TileStatus player, size_t x, size_t y);
+        bool annex(TileStatus player, size_t x, size_t y);
 };

@@ -52,8 +52,7 @@ void Game::fill_map() {
             all_indices.push_back(MapIndex(i, j));
         }
     }
-    std::shuffle(all_indices.begin(), all_indices.end(), 
-                 std::default_random_engine(cfg.random_seed));
+    std::shuffle(all_indices.begin(), all_indices.end(), rng);
     auto it = all_indices.begin();
 
     std::map<TileType, size_t> TILE_COUNTS = {
@@ -152,9 +151,9 @@ bool Game::take_action(TileStatus player) {
             return scout(convert_x(x_char), y);
             break;
         
-        case 'o':
+        case 'c':
             cin >> x_char >> y;
-            return occupy(player, convert_x(x_char), y);
+            return capture(player, convert_x(x_char), y);
             break;
 
         case 'a':
@@ -172,8 +171,8 @@ bool Game::take_action(TileStatus player) {
 bool Game::scout(size_t x, size_t y) {
     Tile T = map[x][y];
 
-    if(T.status != TileStatus::Unclaimed) {
-        cout << "Cannot scout a claimed tile. Input an action: ";
+    if(T.status != TileStatus::Neutral) {
+        cout << "Invalid action: cannot scout a claimed tile.\n";
         return false;
     }
 
@@ -181,12 +180,37 @@ bool Game::scout(size_t x, size_t y) {
     return true;
 }
 
-bool Game::occupy(TileStatus player, size_t x, size_t y) {
-    (void)player;
-    (void)x;
-    (void)y;
-    cout << "occupy placeholder\n";
-    return false;
+bool Game::capture(TileStatus player, size_t x, size_t y) {
+    // check if tile is valid for capture
+    Tile& T = map[x][y];
+    if(T.status == player) {
+        cout << "Invalid action: cannot capture your own tile.\n";
+        return false;
+    }
+    if(count_friendly_adjacencies(player, x, y) < 1) {
+        cout << "Invalid action: tile must be adjacent to a friendly tile.\n";
+        return false;
+    }
+    // fight opponent
+    if(T.status != TileStatus::Neutral) {
+        uniform_int_distribution<int> die_roll{1,6}; 
+        int attacker_roll = die_roll(rng) + count_friendly_adjacencies(player, x, y);
+        int defender_roll = die_roll(rng) + count_friendly_adjacencies(other_player(player), x, y);
+        cout << "Combat: attacker rolled " << attacker_roll << ", defender rolled " << defender_roll << ".\n"; 
+
+        if(attacker_roll < defender_roll) {
+            cout << "Attacker lost, no territory was captured.\n";
+            return true;
+        } else {
+            cout << "Attacker won, territory captured.\n";
+            T.status = player;
+            return true;
+        }
+    }
+
+    
+    T.status = player;
+    return true;
 }
 
 bool Game::annex(TileStatus player, size_t x, size_t y) {
@@ -195,4 +219,23 @@ bool Game::annex(TileStatus player, size_t x, size_t y) {
     (void)y;
     cout << "annex placeholder\n";
     return false;
+}
+
+vector<pair<int, int>> Game::get_friendly_adjacencies(TileStatus player, size_t x, size_t y) {
+    vector<pair<int, int>> directions{{-1,1},  {0,1},  {1,1},
+                                      {-1,0},          {1,0},
+                                      {-1,-1}, {0,-1}, {1,-1}};
+    vector<pair<int, int>> adjacencies;
+    for(auto d : directions) {
+        int x_d = d.first + x;
+        int y_d = d.second + y;
+        if(x_d < 0 || x_d > cfg.map_width ||
+           y_d < 0 || y_d > cfg.map_height)
+            continue;
+
+        if(map[x_d][y_d].status == player)
+            adjacencies.push_back({x_d, y_d});
+    }
+
+    return adjacencies;
 }

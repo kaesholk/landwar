@@ -15,7 +15,7 @@ std::ostream& operator<<(std::ostream& os, const Tile& tile) {
     else if(tile.status == TileStatus::Player2)
         std::cout << Colors::blue;
 
-    if(tile.status == TileStatus::Unclaimed)
+    if(tile.status == TileStatus::Neutral)
         std::cout << TILE_CHARS[TileType::Blank];
     else
         std::cout << TILE_CHARS[tile.tile_type];

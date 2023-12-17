@@ -15,16 +15,15 @@ extern std::map<TileType, char> TILE_CHARS;
 extern std::map<TileType, size_t> TILE_COUNTS;
 
 enum class TileStatus {
-    Unclaimed,
+    Neutral,
     Player1,
     Player2
 };
 
 struct Tile {
-    TileType tile_type;
-    TileStatus status;
-    
-    Tile() : tile_type{TileType::Blank}, status{TileStatus::Unclaimed} {}
+    TileType tile_type = TileType::Blank;
+    TileStatus status = TileStatus::Neutral;
+    bool discovered = false;
 };
 
 std::ostream& operator<<(std::ostream& os, const Tile& tile);

@@ -38,6 +38,10 @@ class Game {
         size_t convert_x(char x_char);
         vector<pair<int, int>> get_friendly_adjacencies(TileStatus player, size_t x, size_t y);
         
+        int count_friendly_adjacencies(TileStatus player, int x, int y) {
+            return get_friendly_adjacencies(player, x, y).size();
+        }
+        
         TileStatus other_player(TileStatus current) {
             switch (current) {
                 case TileStatus::Player1:

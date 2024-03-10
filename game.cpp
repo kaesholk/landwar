@@ -4,10 +4,10 @@
 #include <random>
 #include <fstream>
 #include <cmath>
+#include <unordered_set>
+#include <queue>
 
 using namespace std;
-
-typedef std::pair<size_t, size_t> MapIndex;
 
 void Game::read_config(string filename) {
     ifstream ifs{filename};
@@ -19,13 +19,13 @@ void Game::read_config(string filename) {
 
     cfg = Config{};
     string junk;
+
     ifs >> junk >> cfg.map_width;
+    ifs >> junk >> cfg.map_height;
     if(cfg.map_width > 52) {
         cout << "map width cannot be greater than 52\n";
         exit(1);
     }
-
-    ifs >> junk >> cfg.map_height;
 
     long random_seed_tmp;
     ifs >> junk >> random_seed_tmp;
@@ -45,11 +45,11 @@ void Game::fill_map() {
     vector<TileType> tile_types = {TileType::Ally, TileType::Revolt, 
                                    TileType::Spy, TileType::Nuke};
     
-    // generate all possible pairs of indices
+    // generate all possible pairs of indices (inside the edges)
     std::vector<MapIndex> all_indices;
-    for (size_t i = 0; i < cfg.map_height; ++i) {
-        for (size_t j = 0; j < cfg.map_width; ++j) {
-            all_indices.push_back(MapIndex(i, j));
+    for (size_t i = 1; i < cfg.map_height-1; ++i) {
+        for (size_t j = 1; j < cfg.map_width-1; ++j) {
+            all_indices.push_back({static_cast<int>(i), static_cast<int>(j)});
         }
     }
     std::shuffle(all_indices.begin(), all_indices.end(), rng);
@@ -68,11 +68,23 @@ void Game::fill_map() {
             // if the grid is filled, just stop
             if(it == all_indices.end()) break;
             
-            size_t row = it->first;
-            size_t col = it->second;
+            int row = it->x;
+            int col = it->y;
             map[row][col].tile_type = T;
             it++;
         }
+    }
+
+    // set starting territory for both players
+    // left & right edges
+    for (size_t i = 0; i < cfg.map_height; ++i) {
+        map[i][0].status = TileStatus::Player1;
+        map[i][cfg.map_width-1].status = TileStatus::Player2;
+    }
+    // top & bottom edges
+    for (size_t i = 0; i < cfg.map_width; ++i) {
+        map[0][i].status = TileStatus::Player1;
+        map[cfg.map_height-1][i].status = TileStatus::Player2;
     }
 }
 
@@ -110,12 +122,17 @@ void Game::play() {
     fill_map();
 
     cout << "Welcome to Land War in Southeast Latvia: The Video Game!\n";
-    cout << "The year is 1973. Genesis has just released their masterpiece Selling England by the Pound, and the Soviet Union has launched a land invasion of the Republic of Latvia, which gained its independence after World War II. Will democracy prevail or will the once-free Republic of Latvia fall under the Soviet stronghold? A thrilling game of survival and strategy awaits - prepare to shape history.\n";
-    cout << "Player 1: Soviet Union\n";
-    cout << "Player 2: Republic of Latvia\n";
+    cout << "The year is 1973. Genesis has just released their masterpiece \"Selling England by the Pound\", and the Soviet Union has launched a land invasion of the Republic of Latvia, which gained its independence after World War II. Will democracy prevail or will the once-free Republic of Latvia fall under the Soviet stronghold? A thrilling game of survival and strategy awaits - prepare to shape history.\n";
+    cout << "Player 1: Soviet Union (red)\n";
+    cout << "Player 2: Republic of Latvia (blue)\n";
 
     while(true) {
+        if(num_neutral_tiles <= 0)
+            end_game();
         take_turn(TileStatus::Player1);
+        
+        if(num_neutral_tiles <= 0)
+            end_game();
         take_turn(TileStatus::Player2);
     }
 }
@@ -123,48 +140,57 @@ void Game::play() {
 void Game::take_turn(TileStatus player) {
     int num_actions = cfg.num_player_actions;
     while(num_actions > 0) {
+
         cout << "\n";
         print_map();
         cout << "Player " << static_cast<int>(player) << "'s turn, " 
              << num_actions << " actions remaining. Input an action: ";
-        if(take_action(player)) num_actions--;
+        take_action(player);
+        num_actions--;
     }
 }
 
-size_t Game::convert_x(char x_char) {
-    if(x_char < 'a')
-        return x_char - 'A';
+int Game::col_to_int(char col) {
+    if(col < 'a')
+        return col - 'A';
     else
-        return x_char - 'a';
+        return col - 'a';
 }
 
-bool Game::take_action(TileStatus player) { 
-    string command;
-    cin >> command;
-    char firstchar = command[0];
-    size_t y;
-    char x_char;
+void Game::take_action(TileStatus player) { 
+    bool success = false;
+    while(!success) {
+        cin.clear();
+        string command;
+        cin >> command;
+        char firstchar = command[0];
 
-    switch(firstchar) {
-        case 's':
-            cin >> x_char >> y;
-            return scout(convert_x(x_char), y);
-            break;
-        
-        case 'c':
-            cin >> x_char >> y;
-            return capture(player, convert_x(x_char), y);
-            break;
+        char col;
+        size_t row;
+        cin >> col >> row;
 
-        case 'a':
-            cin >> x_char >> y;
-            return annex(player, convert_x(x_char), y);
-            break;
+        if(!is_in_bounds(col_to_int(col), static_cast<int>(row))) {
+            cout << "Invalid command: out of bounds. Input an action: ";
+            continue;
+        }
 
-        default:
-            cout << "Invalid command. Input an action: ";
-            return false;
-            break;
+        switch(firstchar) {
+            case 's':
+                success = scout(col_to_int(col), row);
+                break;
+            
+            case 'c':
+                success = capture(player, col_to_int(col), row);
+                break;
+
+            case 'a':
+                success = annex(player, col_to_int(col), row);
+                break;
+
+            default:
+                cout << "Invalid command. Input an action: ";
+                break;
+        }
     }
 }
 
@@ -173,6 +199,7 @@ bool Game::scout(size_t x, size_t y) {
 
     if(T.status != TileStatus::Neutral) {
         cout << "Invalid action: cannot scout a claimed tile.\n";
+        cout << "Input an action: ";
         return false;
     }
 
@@ -185,17 +212,19 @@ bool Game::capture(TileStatus player, size_t x, size_t y) {
     Tile& T = map[x][y];
     if(T.status == player) {
         cout << "Invalid action: cannot capture your own tile.\n";
+        cout << "Input an action: ";
         return false;
     }
-    if(count_friendly_adjacencies(player, x, y) < 1) {
+    if(count_friendly_neighbors(player, x, y) < 1) {
         cout << "Invalid action: tile must be adjacent to a friendly tile.\n";
+        cout << "Input an action: ";
         return false;
     }
     // fight opponent
     if(T.status != TileStatus::Neutral) {
         uniform_int_distribution<int> die_roll{1,6}; 
-        int attacker_roll = die_roll(rng) + count_friendly_adjacencies(player, x, y);
-        int defender_roll = die_roll(rng) + count_friendly_adjacencies(other_player(player), x, y);
+        int attacker_roll = die_roll(rng) + count_friendly_neighbors(player, x, y);
+        int defender_roll = die_roll(rng) + count_friendly_neighbors(other_player(player), x, y);
         cout << "Combat: attacker rolled " << attacker_roll << ", defender rolled " << defender_roll << ".\n"; 
 
         if(attacker_roll < defender_roll) {
@@ -208,34 +237,174 @@ bool Game::capture(TileStatus player, size_t x, size_t y) {
         }
     }
 
-    
+    // activate tile effect
+    switch(T.tile_type) {
+        case TileType::Ally:
+            T.status = player;
+            print_map();
+            effect_ally(player);
+            break;
+
+        case TileType::Nuke:
+            effect_nuke(x, y);
+            break;
+
+        case TileType::Revolt:
+            effect_revolt(x, y);
+            break;
+
+        case TileType::Spy:
+            effect_spy(x, y, player);
+            break;
+
+        default:
+            break;
+    }
+
+    num_neutral_tiles--;
     T.status = player;
     return true;
 }
 
 bool Game::annex(TileStatus player, size_t x, size_t y) {
-    (void)player;
-    (void)x;
-    (void)y;
-    cout << "annex placeholder\n";
-    return false;
+    unordered_set<pair<int, int>, pair_hash> discovered;
+    queue<MapIndex> q;
+    q.push(MapIndex{static_cast<int>(x), static_cast<int>(y)});
+
+    while(!q.empty()) {
+        MapIndex idx = q.front();
+        q.pop();
+
+        // check if still within bounds
+        if(!is_in_bounds(idx.x, idx.y)) {
+            cout << "Invalid action: region is not completely surrounded\n";
+            cout << "Input an action: ";
+            return false;
+        }
+
+        // only discover blank or enemy tiles, anything friendly is probably a border
+        if(map[idx.x][idx.y].status != player && discovered.find({idx.x, idx.y}) != discovered.end()) {
+            discovered.insert({idx.x, idx.y});
+            vector<MapIndex> neighbors = get_neighbors(ORTHOGONAL, idx.x, idx.y);
+            for(MapIndex neighbor : neighbors)
+                q.push(neighbor);
+        }
+    }
+
+    for(pair<int,int> idx : discovered) {
+        if(map[idx.first][idx.second].status == TileStatus::Neutral)
+            num_neutral_tiles--;
+        map[idx.first][idx.second].status = player;
+    }
+
+    cout << "Territory annexed.\n";
+    return true;
 }
 
-vector<pair<int, int>> Game::get_friendly_adjacencies(TileStatus player, size_t x, size_t y) {
-    vector<pair<int, int>> directions{{-1,1},  {0,1},  {1,1},
-                                      {-1,0},          {1,0},
-                                      {-1,-1}, {0,-1}, {1,-1}};
-    vector<pair<int, int>> adjacencies;
-    for(auto d : directions) {
-        int x_d = d.first + x;
-        int y_d = d.second + y;
-        if(x_d < 0 || x_d > cfg.map_width ||
-           y_d < 0 || y_d > cfg.map_height)
+vector<MapIndex> Game::get_friendly_neighbors(TileStatus player, size_t x, size_t y) {
+    vector<MapIndex> neighbors;
+    for(auto d : ADJACENT) {
+        int x_d = d.x + static_cast<int>(x);
+        int y_d = d.y + static_cast<int>(y);
+        if(!is_in_bounds(x_d, y_d))
             continue;
 
         if(map[x_d][y_d].status == player)
-            adjacencies.push_back({x_d, y_d});
+            neighbors.push_back({x_d, y_d});
     }
 
-    return adjacencies;
+    return neighbors;
+}
+
+vector<MapIndex> Game::get_neighbors(vector<MapIndex> directions, size_t x, size_t y) {
+    vector<MapIndex> neighbors;
+    for(auto d : directions) {
+        int x_d = d.x + static_cast<int>(x);
+        int y_d = d.y + static_cast<int>(y);
+        if(!is_in_bounds(x_d, y_d))
+            continue;
+    }
+    return neighbors;
+}
+
+void Game::effect_ally(TileStatus player) {
+    cout << "Recieved aid from an ally. Take a free action.";
+    take_action(player);
+}
+
+void Game::effect_nuke(size_t x, size_t y) {
+    cout << "A nuke destroyed the tile. \n";
+    map[x][y].status = TileStatus::Nuked;
+}
+
+void Game::effect_revolt(size_t x, size_t y) {
+    cout << "Revolt: choose any adjacent tile to return to neutrality (valid tiles: ";
+
+    unordered_set<pair<int, int>, pair_hash> valid_tiles;
+    for(auto d : ADJACENT) {
+        int x_d = d.x + static_cast<int>(x);
+        int y_d = d.y + static_cast<int>(y);
+        if(map[x_d][y_d].status != TileStatus::Neutral) {
+            cout << '(' << static_cast<char>(x + d.x + 'A') << ", " << y + d.y << ')';
+            valid_tiles.insert({x_d, y_d});
+        }
+    }
+
+    char input_x;
+    int input_y;
+    cin >> input_x >> input_y;
+    int input_x_num = col_to_int(input_x);
+    while(valid_tiles.find({input_x_num, input_y}) == valid_tiles.end()) {
+        cout << "Invalid tile, choose any adjacent occupied tile: ";
+    }
+    map[input_x_num][input_y].status = TileStatus::Neutral;
+    map[input_x_num][input_y].discovered = false;
+    num_neutral_tiles++;
+}
+
+void Game::effect_spy(size_t x, size_t y, TileStatus player) {
+    cout << "An enemy spy allowed the enemy to take over one of your tiles. \n";
+    cout << "Opponent: Choose an adjacent enemy tile to occupy (valid tiles: ";
+
+    unordered_set<pair<int, int>, pair_hash> valid_tiles;
+    for(auto d : ADJACENT) {
+        int x_d = d.x + static_cast<int>(x);
+        int y_d = d.y + static_cast<int>(y);
+        if (map[x_d][y_d].status == player) {
+            cout << '(' << static_cast<char>(x + d.x + 'A') << ", " << y + d.y << ')';
+            valid_tiles.insert({x_d, y_d});
+        }
+    }
+
+    char input_x;
+    int input_y;
+    cin >> input_x >> input_y;
+    int input_x_num = col_to_int(input_x);
+    while(valid_tiles.find({input_x_num, input_y}) == valid_tiles.end()) {
+        cout << "Invalid tile, choose any adjacent enemy tile: ";
+    }
+    map[input_x_num][input_y].status = other_player(player);
+}
+     
+void Game::end_game() {
+    // count territory
+    int player_1_tiles = 0;
+    int player_2_tiles = 0;
+    for (size_t i = 0; i < cfg.map_height; ++i) {
+        for (size_t j = 0; j < cfg.map_width; ++j) {
+            if(map[i][j].status == TileStatus::Player1)
+                player_1_tiles++;
+            else if(map[i][j].status == TileStatus::Player2)
+                player_2_tiles++;
+        }
+    }   
+
+    if(player_1_tiles > player_2_tiles) {
+        cout << "Game over! Player 1 wins, with " << player_1_tiles << " tiles captured.\n";
+    } else if (player_2_tiles > player_1_tiles) {
+        cout << "Game over! Player 2 wins, with " << player_2_tiles << " tiles captured.\n";
+    } else {
+        cout << "Game over! Draw.\n";
+    }
+    exit(0);
 }

@@ -17,7 +17,8 @@ extern std::map<TileType, size_t> TILE_COUNTS;
 enum class TileStatus {
     Neutral,
     Player1,
-    Player2
+    Player2,
+    Nuked
 };
 
 struct Tile {
